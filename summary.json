@@ -1,0 +1,50 @@
+{
+  "started_at_utc": "2026-10-24T03:35:06+00:00",
+  "finished_at_utc": "2026-10-24T03:35:56+00:00",
+  "rankings_and_verifiers_unchanged": true,
+  "rank_range": [
+    1,
+    150
+  ],
+  "approved_record_rows": 10729,
+  "unique_players_approved_records_only": 2934,
+  "additional_verifier_only_players": 18,
+  "unique_players_including_verifiers": 2952,
+  "players_with_harder_rank_due_to_verification": 26,
+  "cumulative_checkpoints": {
+    "1": {
+      "including_verifiers": 1,
+      "approved_records_only": 0
+    },
+    "10": {
+      "including_verifiers": 15,
+      "approved_records_only": 11
+    },
+    "30": {
+      "including_verifiers": 241,
+      "approved_records_only": 233
+    },
+    "50": {
+      "including_verifiers": 667,
+      "approved_records_only": 660
+    },
+    "75": {
+      "including_verifiers": 1030,
+      "approved_records_only": 1016
+    },
+    "100": {
+      "including_verifiers": 1503,
+      "approved_records_only": 1483
+    },
+    "125": {
+      "including_verifiers": 2173,
+      "approved_records_only": 2154
+    },
+    "150": {
+      "including_verifiers": 2952,
+      "approved_records_only": 2934
+    }
+  },
+  "definition": "Hardest is the smallest current rank among each player ID's approved 100% records and listed verifier credits; each player appears in exactly one rank bin. Cumulative N counts distinct players with hardest rank <= N.",
+  "limitation": "Public Pointercrate records/verification credits, not unsubmitted real-life completions. Records collected over an interval, not an atomic database snapshot."
+}
