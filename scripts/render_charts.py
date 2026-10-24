@@ -79,7 +79,60 @@ def style_axis(ax):
     ax.set_xlabel('Pointercrate 名次 N（越小越难）', labelpad=7)
     ax.tick_params(axis='both', length=0, pad=6)
     # Actual list boundary; unrelated to GDDL tiers.
-    ax.axvline(75.5, color='#64748b', lw=1.15, ls=(0, (4, 3)), zorder=2)
+    ax.axvline(75.5, color='#526279', lw=1.75, ls=(0, (9, 5)), zorder=2)
+
+
+def resolve_plot_tiers(tiers, rows):
+    """For missing tiers, inherit the next ranked level's plotting tier.
+
+    Keep official/source data unchanged. Consecutive missing values inherit
+    recursively, working backwards from #150.
+    """
+    if not tiers:
+        return {}
+    filled, sources = {}, {}
+    next_tier, next_rank = None, None
+    for rank in range(150, 0, -1):
+        if tiers[rank] is not None:
+            next_tier, next_rank = tiers[rank], rank
+        if next_tier is None:
+            raise ValueError(f'Cannot inherit a tier below #{rank}: no lower-ranked source is available')
+        filled[rank], sources[rank] = next_tier, next_rank
+    with (ROOT/'gddl_plot_tiers.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f, lineterminator='\n')
+        w.writerow(['rank', 'level_name', 'source_gddl_tier', 'plot_tier', 'inherited_from_lower_rank', 'tier_source_rank'])
+        for row in rows:
+            n = row['rank']
+            w.writerow([n, row['level_name'], tiers[n] if tiers[n] is not None else '', filled[n], tiers[n] is None, sources[n]])
+    return filled
+
+
+def tier_runs(tiers):
+    runs = []
+    for rank in range(1, 151):
+        tier = tiers[rank]
+        if not runs or runs[-1][2] != tier:
+            runs.append([rank, rank, tier])
+        else:
+            runs[-1][1] = rank
+    return runs
+
+
+def add_tier_dividers(ax, tiers):
+    """Small dashes mark every actual change in the resolved plotting tiers."""
+    ax.text(.25, 1.225, 'Main List  ·  #1–75', transform=ax.transAxes, ha='center', fontsize=11, color=INK)
+    ax.text(.75, 1.225, 'Extended List  ·  #76–150', transform=ax.transAxes, ha='center', fontsize=11, color=INK)
+    if not tiers:
+        return
+    runs = tier_runs(tiers)
+    for a, b in zip(runs, runs[1:]):
+        boundary = a[1]+.5
+        # The heavier main/extended line takes precedence if boundaries coincide.
+        if boundary != 75.5:
+            ax.axvline(boundary, color='#9aa8b7', lw=.7, ls=(0, (2, 3)), alpha=.75, zorder=1.5)
+    for start, end, tier in runs:
+        width = end-start+1
+        ax.text((start+end)/2, 1.025, f'T{tier}', transform=ax.get_xaxis_transform(), ha='center', va='bottom', rotation=0 if width>=4 else 90, fontsize=9 if width>=4 else 6.7, color='#526279', clip_on=False)
 
 
 def add_tier_strip(ax, tiers):
@@ -94,26 +147,16 @@ def add_tier_strip(ax, tiers):
     color = {t: cmap(float(np.clip((t-34)/5, 0, 1))) for t in values}
     for rank, tier in tiers.items():
         ax.axvspan(rank - .5, rank + .5, ymin=1.02, ymax=1.10, facecolor=color.get(tier, '#cbd5e1'), clip_on=False)
-    ax.text(0, 1.205, 'GDDL tier（逐关；灰色=缺失）', transform=ax.transAxes, fontsize=8.5, color='#64748b')
+    ax.text(0, 1.205, 'GDDL tier（缺失沿用下一名，仅绘图）', transform=ax.transAxes, fontsize=8.5, color='#64748b')
     legend_step = .61 / max(len(values), 1)
     for i, tier in enumerate(values):
         loc = .37 + i*legend_step
         ax.plot([loc], [1.225], marker='s', markersize=6, color=color[tier], transform=ax.transAxes, clip_on=False)
         ax.text(loc+.01, 1.205, f'T{tier}', fontsize=8.5, transform=ax.transAxes, color=INK)
-    # Mark genuine changes only where both adjacent constant-tier runs span >= 5 levels.
-    runs = []
-    for rank in range(1, 151):
-        tier = tiers[rank]
-        if not runs or runs[-1][2] != tier:
-            runs.append([rank, rank, tier])
-        else:
-            runs[-1][1] = rank
+    runs = tier_runs(tiers)
     for start, end, tier in runs:
         if end - start + 1 >= 7 and tier is not None:
             ax.text((start+end)/2, 1.125, f'T{tier}', transform=ax.get_xaxis_transform(), ha='center', va='bottom', fontsize=9, color=INK, clip_on=False)
-    for a, b in zip(runs, runs[1:]):
-        if a[2] is not None and b[2] is not None and min(a[1]-a[0]+1, b[1]-b[0]+1) >= 5:
-            ax.axvline(a[1]+.5, color='#a78bca', lw=.7, ls=':', alpha=.8)
 
 
 def draw_distribution(ax, rows, peaks):
@@ -161,14 +204,16 @@ def draw_peak_table(ax, peaks, tiers):
     bottom = start - len(peaks)*step - .005
     ax.text(0, bottom, '高峰筛选：人数 ≥35，且至少为\n前后各 4 名中位数的 3 倍。\n标注反映人数集中，不代表难度异常。', fontsize=8.5, color='#64748b', va='top', linespacing=1.7)
     ax.text(0, bottom-.15, '读图提示', fontsize=11, fontweight='bold', va='top')
-    note = '两图统一包含 verifier，均按玩家 ID 去重。\n上图：最难通关恰好为该名次。\n下图：上图从第 1 名逐柱累加。\n虚线：主榜 / 扩展榜分界。'
+    note = '两图统一包含 verifier，均按玩家 ID 去重。\n上图：最难通关恰好为该名次。\n下图：上图从第 1 名逐柱累加。\n大虚线：主榜 / 扩展榜分界。'
     if tiers:
-        note += '\n顶端色带：逐关 GDDL tier。\nTier 与排名可交错，色带不拟合分界。'
+        note += '\n上图小虚线：tier 变化；下图保留色带。\n未评级关卡沿用下一名 tier（仅绘图）。'
+    note += '\n零值：无人以该关为 Hardest，\n并非该关无人通关或没有 verifier。'
     ax.text(0, bottom-.19, note, fontsize=8.5, color='#64748b', va='top', linespacing=1.7)
 
 
 def render(rows, summary, peaks, tiers):
     setup_fonts()
+    plot_tiers = resolve_plot_tiers(tiers, rows)
     fig = plt.figure(figsize=(21, 12), facecolor=BG)
     grid = fig.add_gridspec(2, 2, width_ratios=[4.7, 1.6], height_ratios=[1.15, 1], left=.055, right=.98, top=.755, bottom=.10, hspace=.62, wspace=.10)
     distribution = fig.add_subplot(grid[0, 0])
@@ -179,8 +224,8 @@ def render(rows, summary, peaks, tiers):
     # Leave title/annotation spacing independent of the color strip.
     distribution.set_title('01  Hardest 恰好为第 N 名的人数（含 verifier）', loc='left', fontsize=14, pad=66)
     cumulative.set_title('02  Hardest 位于前 N 名的累计人数（含 verifier）', loc='left', fontsize=14, pad=66)
-    add_tier_strip(distribution, tiers)
-    add_tier_strip(cumulative, tiers)
+    add_tier_dividers(distribution, plot_tiers)
+    add_tier_strip(cumulative, plot_tiers)
     draw_peak_table(table, peaks, tiers)
     fig.text(.055, .96, 'Pointercrate Top 150 · 玩家 Hardest 分布', fontsize=25, fontweight='bold', va='top')
     fig.text(.055, .905, f"统一口径：{summary['unique_players_including_verifiers']:,} 人（含 verifier），按玩家 ID 去重；累计图由分布图逐柱累加得到", fontsize=12, color='#475569')
@@ -188,7 +233,7 @@ def render(rows, summary, peaks, tiers):
     footer = '通关数据快照：2026-10-24 11:35 北京时间  |  按玩家 ID 去重  |  仅公开批准的 100% 记录与榜单验证者'
     if tiers:
         metadata = json.loads((ROOT/'gddl_metadata.json').read_text())
-        footer += '\nGDDL 为另行抓取的评级快照；Tier 四舍五入，缺失项保持空白。来源及采集时间见 README。'
+        footer += '\nGDDL 缺失评级仅在绘图时沿用下一名 tier；源数据空值保留。0 表示无人以该关为 Hardest。'
     else:
         footer += '\nGDDL 评级尚未取得：本图未绘制 GDDL tier 分区，也未将名次推算成 tier。'
     fig.text(.055, .025, footer, fontsize=9.2, color='#64748b', linespacing=1.6)
@@ -206,10 +251,18 @@ def render(rows, summary, peaks, tiers):
         f, ax = plt.subplots(figsize=(17, 6.4), facecolor=BG)
         f.subplots_adjust(left=.06, right=.985, top=.70, bottom=.18)
         draw(ax)
-        add_tier_strip(ax, tiers)
+        if name == 'hardest_distribution':
+            add_tier_dividers(ax, plot_tiers)
+        else:
+            add_tier_strip(ax, plot_tiers)
         f.suptitle(title, x=.06, ha='left', fontsize=21, y=.975)
         f.text(.06, .86, sub, fontsize=10, color='#64748b')
-        f.text(.06,.035,'2026-10-24 11:35 北京时间快照 · 含验证者 · 按玩家 ID 去重 · 虚线为主榜 / 扩展榜分界',fontsize=9,color='#64748b')
+        footer = '2026-10-24 11:35 北京时间快照 · 含 verifier · 大虚线：主榜 / 扩展榜分界'
+        if name == 'hardest_distribution':
+            footer += '\n小虚线：tier 变化，未评级沿用下一名 tier；0 表示无人以该关为 Hardest，verifier 若有更难通关则计入更高名次。'
+        else:
+            footer += '\nGDDL 色带：未评级沿用下一名 tier，仅用于绘图。'
+        f.text(.06,.02,footer,fontsize=9,color='#64748b',linespacing=1.5)
         f.savefig(ROOT/f'{name}.png', dpi=160)
         plt.close(f)
     # Separate detailed panels improve legibility in GitHub's narrower README column.

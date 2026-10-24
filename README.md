@@ -7,17 +7,26 @@
 
 ## 各名次人数（包含 verifier）
 
-![各名次 Hardest 人数：平方根纵轴及 GDDL tier 色带](hardest_distribution.png)
+![各名次 Hardest 人数：平方根纵轴、Main List 分界与 tier 小虚线](hardest_distribution.png)
 
 - 纵轴采用**平方根刻度**，刻度标签仍是实际人数。1–25 人的小柱更清楚，最大值仍完整保留；柱高不再与人数成线性比例。
 - 每位玩家只归到其最难通关的名次（其已完成关卡中最小的排名数字）。零人数用灰点表示。
 - 橙色为明显高于周围的柱子；柱顶不再标排名。高峰明细表保留排名、关名和人数。
-- 顶部加粗色带显示逐关 GDDL tier，采用 **T39 柔和红色 → T34 柔和绿色**的渐变；tier 文字置于色带上方，灰色表示未取得评级。GDDL tier 与 Pointercrate 名次存在交错，因此不将整段排名强行视为同一个 tier。
-- 灰色竖虚线为 **#75 / #76 主榜与扩展榜分界**，不是 GDDL 分界。
+- 表 1 去掉 tier 色带。**大虚线**在 #75 / #76 之间区分 **Main List / Extended List**；**小虚线**标出相邻关卡绘图 tier 的每一次变化，tier 文字放在上方。GDDL tier 与排名可能交错，同一 tier 可以出现多个区间。
+- 未评级关卡的绘图 tier **沿用下一名**；若连续多关未评级，则继续向下一名顺延至有评级的关卡。13 处填补均记录在 [绘图 tier 明细](gddl_plot_tiers.csv)，原始 GDDL 空值保留。
+- 两图包含 verifier，并按玩家 ID 去重；每人仅归入其最难通关名次。
+
+### 为什么包含 verifier 仍有零值？
+
+**零值表示没有玩家把该关作为其 Hardest，而不是该关没有通关者或验证者。** 同一人只能归入一个名次；当验证者通关过更难关卡时，就计入更高名次。
+
+例如：#5 **Amethyst** 的 verifier **wPopoff** 已计入其更难的通关 **#3 Society**，所以 #5 可以为零。#14 **The Bloop** 的 verifier **Zoink** 归在 **#2 Artemis 13**。已逐个核对全部 20 个零值关卡，其 verifier 都计入了更高名次；[完整零值核对表](zero_bin_audit.csv)列出每关的通关人数、verifier 及其 Hardest 归属。
 
 ## 累计人数与比例（包含 verifier）
 
 ![前 N 名累计去重人数与样本占比](hardest_cumulative.png)
+
+表 2 保留 **T39 柔和红色 → T34 柔和绿色**的 GDDL tier 色带，文字在色带上方；未评级关卡沿用下一名的绘图 tier，与表 1 的小虚线使用同一份分组数据。
 
 绿色柱为至少通关过前 N 名中一关的累计去重人数。**它直接由上图的同一组含 verifier 人数，从第 1 名起逐柱累加得到**；纵轴保持线性，百分比以全部 2,952 人为分母。
 
@@ -90,15 +99,15 @@
 - 全部图表统一包含 verifier：按 Pointercrate 玩家 ID 去重，将公开已批准的 100% 记录与榜单验证者合并；同一人即使有多条记录或验证多个关卡，也只按其最靠前的已通关名次归类一次。
 - CSV 中保留的 `approved_records_only` 字段属于对照数据；本页所有图表均使用 `including_verifiers` 系列。绘图脚本检查每个名次的累计值是否等于前面各柱之和。
 - 不包含未提交的实际通关。抓取前后，前 150 名的排名和验证者一致；通关记录为抓取期间取得的数据，并非数据库的原子快照。
-- GDDL 评级抓取于 **2026-10-24 11:57–12:01（北京时间）**，与通关数据的采集时间分别记录。按 Geometry Dash 关卡 ID 精确匹配，**137 / 150 关有评级，13 关保留空值**。
-- GDDL tier 优先将 `Rating` 四舍五入为整数（0.5 向上）；无 `Rating` 时使用官方 `DefaultRating`。评级缺失时不通过排名推算。逐关值、来源类型、评分数及链接保留在 CSV 中。
+- GDDL 评级抓取于 **2026-10-24 11:57–12:01（北京时间）**，与通关数据的采集时间分别记录。按 Geometry Dash 关卡 ID 精确匹配，**137 / 150 关有评级，13 关在源数据中保留空值；仅绘图时沿用下一名的 tier**。
+- GDDL tier 优先将 `Rating` 四舍五入为整数（0.5 向上）；无 `Rating` 时使用官方 `DefaultRating`。原始评级数据不作修改；13 个缺失值仅在绘图层按上述顺延规则填补，并记录 tier 来源名次。逐关原始值、来源类型、评分数及链接保留在 CSV 中。
 - [Pointercrate](https://pointercrate.com/) · [GDDL](https://gdladder.com/) · [GDDL 匹配与采集元数据](gddl_metadata.json)。
 
 ## 下载与复现
 
 [总览 PNG](hardest_top150_charts.png) · [矢量 SVG](hardest_top150_charts.svg) · [PDF](hardest_top150_charts.pdf)
 
-[150 个名次的统计 CSV](hardest_by_rank.csv) · [高峰关卡 CSV](peak_levels.csv) · [逐关 GDDL tier CSV](gddl_tiers.csv) · [统计汇总 JSON](summary.json)
+[150 个名次的统计 CSV](hardest_by_rank.csv) · [高峰关卡 CSV](peak_levels.csv) · [逐关 GDDL tier CSV](gddl_tiers.csv) · [绘图 tier 及填补来源](gddl_plot_tiers.csv) · [零值核对表](zero_bin_audit.csv) · [统计汇总 JSON](summary.json)
 
 安装 Python 的 `matplotlib` 和 `numpy` 后，在仓库根目录运行：
 
