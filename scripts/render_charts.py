@@ -3,9 +3,12 @@ import csv
 import json
 import os
 import statistics
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
+OUTPUT = ROOT / 'charts' / 'traditional'
 os.environ.setdefault('MPLCONFIGDIR', '/tmp/pointercrate-chart-mpl')
 os.environ.setdefault('XDG_CACHE_HOME', '/tmp/pointercrate-chart-cache')
 import matplotlib
@@ -28,6 +31,10 @@ def load_data():
                 row[key] = int(row[key])
     assert [r['rank'] for r in rows] == list(range(1, 151))
     summary = json.loads((ROOT / 'summary.json').read_text())
+    assert summary['list_type'] == 'traditional_demonlist' and summary['rank_field'] == 'rated_position'
+    levels = json.loads((ROOT / 'data' / 'levels.json').read_text())
+    assert all(d['rated'] for d in levels)
+    assert [d['rated_position'] for d in levels] == list(range(1,151))
     counts = np.array([r[COUNT_FIELD] for r in rows], dtype=int)
     cumulative = np.array([r[CUMULATIVE_FIELD] for r in rows], dtype=int)
     assert np.array_equal(np.cumsum(counts), cumulative), 'Every cumulative bin must equal the sum of the verifier-inclusive histogram bins'
@@ -66,7 +73,7 @@ def style_axis(ax):
     ax.grid(axis='y', color=GRID, lw=.7)
     ax.set_xlim(.2, 150.8)
     ax.set_xticks([1] + list(range(10, 151, 10)))
-    ax.set_xlabel('Pointercrate 名次 N（越小越难）', labelpad=7)
+    ax.set_xlabel('传统 Demonlist 名次 N（越小越难）', labelpad=7)
     ax.tick_params(axis='both', length=0, pad=6)
     # Main / Extended List boundary.
     ax.axvline(75.5, color='#526279', lw=1.75, ls=(0, (9, 5)), zorder=2)
@@ -77,7 +84,7 @@ def add_list_labels(ax):
     ax.text(.75, 1.035, 'Extended List  ·  #76–150', transform=ax.transAxes, ha='center', fontsize=10.5, color=INK)
 
 
-def draw_distribution(ax, rows, peaks):
+def draw_distribution(ax, rows, peaks, upper=None):
     style_axis(ax)
     peak_ranks = {r['rank'] for r in peaks}
     x = np.array([r['rank'] for r in rows])
@@ -86,8 +93,9 @@ def draw_distribution(ax, rows, peaks):
     ax.bar(x, y, width=.8, color=[ORANGE if n in peak_ranks else BLUE for n in x], zorder=3)
     # Explicit dots distinguish zero-count bins from missing data.
     ax.scatter(x[y == 0], np.zeros(sum(y == 0)), s=7, c='#94a3b8', zorder=4, clip_on=False)
-    ticks = [0, 1, 5, 10, 25, 50, 100, 200, 300]
-    ax.set_ylim(0, 355)
+    upper = upper or max(355, int(np.ceil(max(y)*1.15/50)*50))
+    ticks = [0, 1, 5, 10, 25, 50, 100, 200, 300] + list(range(400, upper, 100))
+    ax.set_ylim(0, upper)
     ax.yaxis.set_major_locator(FixedLocator(ticks))
     ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f'{v:,.0f}'))
     ax.yaxis.set_minor_locator(NullLocator())
@@ -112,7 +120,7 @@ def draw_peak_table(ax, peaks):
     ax.set_axis_off()
     ax.text(0, 1, '高峰关卡', fontsize=15, fontweight='bold', va='top')
     ax.text(0, .96, '名次 / 关名 / Hardest 人数（含 verifier）', fontsize=8.5, color='#64748b', va='top')
-    start, step = .91, .0275
+    start, step = .91, min(.0275, .55/max(1,len(peaks)))
     for i, r in enumerate(peaks):
         y = start-i*step
         ax.text(0, y, f"#{r['rank']:>3}", fontsize=9.2, color=ORANGE, va='center')
@@ -129,34 +137,38 @@ def draw_peak_table(ax, peaks):
 
 def render(rows, summary, peaks):
     setup_fonts()
+    OUTPUT.mkdir(parents=True, exist_ok=True)
+    total = summary['unique_players_including_verifiers']
+    stamp = datetime.fromisoformat(summary['finished_at_utc']).astimezone(ZoneInfo('Asia/Shanghai')).strftime('%Y-%m-%d %H:%M')
+    upper = max(355, int(np.ceil(max(r[COUNT_FIELD] for r in rows)*1.15/50)*50))
     fig = plt.figure(figsize=(21, 12), facecolor=BG)
     grid = fig.add_gridspec(2, 2, width_ratios=[4.7, 1.6], height_ratios=[1.15, 1], left=.055, right=.98, top=.80, bottom=.10, hspace=.43, wspace=.10)
     distribution = fig.add_subplot(grid[0, 0])
     cumulative = fig.add_subplot(grid[1, 0])
     table = fig.add_subplot(grid[:, 1])
-    draw_distribution(distribution, rows, peaks)
+    draw_distribution(distribution, rows, peaks, upper)
     draw_cumulative(cumulative, rows)
     distribution.set_title('01  Hardest 恰好为第 N 名的人数（含 verifier）', loc='left', fontsize=14, pad=32)
     cumulative.set_title('02  Hardest 位于前 N 名的累计人数（含 verifier）', loc='left', fontsize=14, pad=32)
     add_list_labels(distribution)
     add_list_labels(cumulative)
     draw_peak_table(table, peaks)
-    fig.text(.055, .96, 'Pointercrate Top 150 · 玩家 Hardest 分布', fontsize=25, fontweight='bold', va='top')
+    fig.text(.055, .96, '传统 Demonlist Top 150 · 玩家 Hardest 分布', fontsize=25, fontweight='bold', va='top')
     fig.text(.055, .905, f"统一口径：{summary['unique_players_including_verifiers']:,} 人（含 verifier），按玩家 ID 去重；累计图由分布图逐柱累加得到", fontsize=12, color='#475569')
     fig.text(.055, .875, '平方根纵轴保留高峰，同时让 1–25 人的小柱更易辨认；橙色标出明显高于周边的关卡。', fontsize=10.5, color='#64748b')
-    footer = '通关数据快照：2026-10-24 11:35 北京时间  |  按玩家 ID 去重  |  仅公开批准的 100% 记录与榜单验证者'
+    footer = f'传统榜单：150 关均已评级  |  数据快照：{stamp} 北京时间  |  按玩家 ID 去重，包含 verifier'
     footer += '\n0 表示无人以该关为 Hardest；verifier 若有更难通关，则归入更高名次。'
     fig.text(.055, .025, footer, fontsize=9.2, color='#64748b', linespacing=1.6)
-    fig.savefig(ROOT / 'hardest_top150_charts.png', dpi=160)
-    fig.savefig(ROOT / 'hardest_top150_charts.svg')
-    svg = ROOT / 'hardest_top150_charts.svg'
+    fig.savefig(OUTPUT / 'hardest_top150_charts.png', dpi=160)
+    fig.savefig(OUTPUT / 'hardest_top150_charts.svg')
+    svg = OUTPUT / 'hardest_top150_charts.svg'
     svg.write_text('\n'.join(line.rstrip() for line in svg.read_text().splitlines())+'\n', encoding='utf-8')
-    fig.savefig(ROOT / 'hardest_top150_charts.pdf')
+    fig.savefig(OUTPUT / 'hardest_top150_charts.pdf')
     plt.close(fig)
     # Individual wide charts keep text legible in GitHub's README display.
     for name, draw, title, sub in [
-        ('hardest_distribution', lambda ax: draw_distribution(ax, rows, peaks), 'Hardest 恰好为第 N 名的人数（含 verifier）', '统一口径：2,952 人，按玩家 ID 去重 · 平方根纵轴，刻度为实际人数 · 橙柱的关名及人数见高峰明细。'),
-        ('hardest_cumulative', lambda ax: draw_cumulative(ax, rows), 'Hardest 位于前 N 名的累计人数（含 verifier）', '统一口径：2,952 人，按玩家 ID 去重 · 由分布图从第 1 名逐柱累加 · 线性纵轴。'),
+        ('hardest_distribution', lambda ax: draw_distribution(ax, rows, peaks, upper), '传统榜 · Hardest 恰好为第 N 名的人数（含 verifier）', f'统一口径：{total:,} 人，150 关均已评级 · 平方根纵轴，刻度为实际人数 · 橙柱关名及人数见高峰明细。'),
+        ('hardest_cumulative', lambda ax: draw_cumulative(ax, rows), '传统榜 · Hardest 位于前 N 名的累计人数（含 verifier）', f'统一口径：{total:,} 人，150 关均已评级 · 由分布图从第 1 名逐柱累加 · 线性纵轴。'),
     ]:
         f, ax = plt.subplots(figsize=(17, 6.4), facecolor=BG)
         f.subplots_adjust(left=.06, right=.985, top=.78, bottom=.18)
@@ -164,26 +176,26 @@ def render(rows, summary, peaks):
         add_list_labels(ax)
         f.suptitle(title, x=.06, ha='left', fontsize=21, y=.975)
         f.text(.06, .86, sub, fontsize=10, color='#64748b')
-        footer = '2026-10-24 11:35 北京时间快照 · 含 verifier · 大虚线：主榜 / 扩展榜分界'
+        footer = f'{stamp} 北京时间快照 · 传统 Demonlist · 含 verifier · 大虚线：主榜 / 扩展榜分界'
         footer += '\n0 表示无人以该关为 Hardest；verifier 若有更难通关，则归入更高名次。'
         f.text(.06,.02,footer,fontsize=9,color='#64748b',linespacing=1.5)
-        f.savefig(ROOT/f'{name}.png', dpi=160)
+        f.savefig(OUTPUT/f'{name}.png', dpi=160)
         plt.close(f)
     # Separate detailed panels improve legibility in GitHub's narrower README column.
     for start in [1, 51, 101]:
         subset = rows[start-1:start+49]
         f, ax = plt.subplots(figsize=(15, 5), facecolor=BG)
         f.subplots_adjust(left=.065, right=.985, top=.78, bottom=.18)
-        draw_distribution(ax, subset, [])
+        draw_distribution(ax, subset, [], upper)
         ax.set_xlim(start-.65, start+49.65)
         ax.set_xticks([r['rank'] for r in subset])
         ax.tick_params(axis='x', labelsize=8, rotation=90)
         for r in subset:
             value = r['hardest_players_including_verifiers']
             ax.annotate(str(value), (r['rank'], value), xytext=(0, 5), textcoords='offset points', ha='center', fontsize=8, color=INK)
-        f.suptitle(f"逐名次精细视图 · #{start}–#{start+49}（含 verifier）", x=.065, ha='left', fontsize=17, y=.96)
-        f.text(.065,.86,'统一口径：2,952 人，按玩家 ID 去重 · 平方根纵轴 · 柱上为实际人数，每位玩家只归入其最难通关名次',fontsize=10,color='#64748b')
-        f.savefig(ROOT/f'hardest_detail_{start}_{start+49}.png',dpi=160)
+        f.suptitle(f"传统榜精细视图 · #{start}–#{start+49}（含 verifier）", x=.065, ha='left', fontsize=17, y=.96)
+        f.text(.065,.86,f'统一口径：{total:,} 人，150 关均已评级 · 平方根纵轴 · 柱上为实际人数，每位玩家只归入其最难通关名次',fontsize=10,color='#64748b')
+        f.savefig(OUTPUT/f'hardest_detail_{start}_{start+49}.png',dpi=160)
         plt.close(f)
     print(f'Rendered charts; {len(peaks)} peak levels; {summary["unique_players_including_verifiers"]:,} players including verifiers')
 

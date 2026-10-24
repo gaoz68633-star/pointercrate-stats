@@ -1,0 +1,13 @@
+{
+  "started_at_utc": "2026-10-24T04:58:38+00:00",
+  "finished_at_utc": "2026-10-24T04:59:33+00:00",
+  "rankings_and_verifiers_unchanged": true,
+  "list_type": "traditional_demonlist",
+  "rank_field": "rated_position",
+  "all_selected_levels_rated": true,
+  "selected_level_count": 150,
+  "maximum_global_position_used_for_fetch": 160,
+  "downloaded_record_rows": 11950,
+  "excluded_unrated_record_rows": 1,
+  "records_uncompressed_sha256": "9f7477a8c581df634d8b77cf72a5272a483ce27f169fb0d07116d708a5689ee0"
+}
