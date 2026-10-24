@@ -1,5 +1,6 @@
 """Re-render the published player-count snapshot without fetching new records."""
 import csv
+import argparse
 import json
 import os
 import statistics
@@ -73,7 +74,7 @@ def style_axis(ax):
     ax.grid(axis='y', color=GRID, lw=.7)
     ax.set_xlim(.2, 150.8)
     ax.set_xticks([1] + list(range(10, 151, 10)))
-    ax.set_xlabel('传统 Demonlist 名次 N（越小越难）', labelpad=7)
+    ax.set_xlabel('Pointercrate 名次 N（越小越难）', labelpad=7)
     ax.tick_params(axis='both', length=0, pad=6)
     # Main / Extended List boundary.
     ax.axvline(75.5, color='#526279', lw=1.75, ls=(0, (9, 5)), zorder=2)
@@ -135,9 +136,12 @@ def draw_peak_table(ax, peaks):
     ax.text(0, bottom-.19, note, fontsize=8.5, color='#64748b', va='top', linespacing=1.7)
 
 
-def render(rows, summary, peaks):
+def render(rows, summary, peaks, including_unrated=False):
     setup_fonts()
-    OUTPUT.mkdir(parents=True, exist_ok=True)
+    output = ROOT/'charts'/'including_unrated' if including_unrated else OUTPUT
+    output.mkdir(parents=True, exist_ok=True)
+    label = 'Pointercrate 榜（包含 unrated）' if including_unrated else 'Pointercrate 榜'
+    scope = '前 150 名包含未评级关卡' if including_unrated else '150 关均已评级'
     total = summary['unique_players_including_verifiers']
     stamp = datetime.fromisoformat(summary['finished_at_utc']).astimezone(ZoneInfo('Asia/Shanghai')).strftime('%Y-%m-%d %H:%M')
     upper = max(355, int(np.ceil(max(r[COUNT_FIELD] for r in rows)*1.15/50)*50))
@@ -153,22 +157,22 @@ def render(rows, summary, peaks):
     add_list_labels(distribution)
     add_list_labels(cumulative)
     draw_peak_table(table, peaks)
-    fig.text(.055, .96, '传统 Demonlist Top 150 · 玩家 Hardest 分布', fontsize=25, fontweight='bold', va='top')
+    fig.text(.055, .96, f'{label} Top 150 · 玩家 Hardest 分布', fontsize=25, fontweight='bold', va='top')
     fig.text(.055, .905, f"统一口径：{summary['unique_players_including_verifiers']:,} 人（含 verifier），按玩家 ID 去重；累计图由分布图逐柱累加得到", fontsize=12, color='#475569')
     fig.text(.055, .875, '平方根纵轴保留高峰，同时让 1–25 人的小柱更易辨认；橙色标出明显高于周边的关卡。', fontsize=10.5, color='#64748b')
-    footer = f'传统榜单：150 关均已评级  |  数据快照：{stamp} 北京时间  |  按玩家 ID 去重，包含 verifier'
+    footer = f'{label}：{scope}  |  数据快照：{stamp} 北京时间  |  按玩家 ID 去重，包含 verifier'
     footer += '\n0 表示无人以该关为 Hardest；verifier 若有更难通关，则归入更高名次。'
     fig.text(.055, .025, footer, fontsize=9.2, color='#64748b', linespacing=1.6)
-    fig.savefig(OUTPUT / 'hardest_top150_charts.png', dpi=160)
-    fig.savefig(OUTPUT / 'hardest_top150_charts.svg')
-    svg = OUTPUT / 'hardest_top150_charts.svg'
+    fig.savefig(output / 'hardest_top150_charts.png', dpi=160)
+    fig.savefig(output / 'hardest_top150_charts.svg')
+    svg = output / 'hardest_top150_charts.svg'
     svg.write_text('\n'.join(line.rstrip() for line in svg.read_text().splitlines())+'\n', encoding='utf-8')
-    fig.savefig(OUTPUT / 'hardest_top150_charts.pdf')
+    fig.savefig(output / 'hardest_top150_charts.pdf')
     plt.close(fig)
     # Individual wide charts keep text legible in GitHub's README display.
     for name, draw, title, sub in [
-        ('hardest_distribution', lambda ax: draw_distribution(ax, rows, peaks, upper), '传统榜 · Hardest 恰好为第 N 名的人数（含 verifier）', f'统一口径：{total:,} 人，150 关均已评级 · 平方根纵轴，刻度为实际人数 · 橙柱关名及人数见高峰明细。'),
-        ('hardest_cumulative', lambda ax: draw_cumulative(ax, rows), '传统榜 · Hardest 位于前 N 名的累计人数（含 verifier）', f'统一口径：{total:,} 人，150 关均已评级 · 由分布图从第 1 名逐柱累加 · 线性纵轴。'),
+        ('hardest_distribution', lambda ax: draw_distribution(ax, rows, peaks, upper), f'{label} · Hardest 恰好为第 N 名的人数（含 verifier）', f'统一口径：{total:,} 人，{scope} · 平方根纵轴，刻度为实际人数 · 橙柱关名及人数见高峰明细。'),
+        ('hardest_cumulative', lambda ax: draw_cumulative(ax, rows), f'{label} · Hardest 位于前 N 名的累计人数（含 verifier）', f'统一口径：{total:,} 人，{scope} · 由分布图从第 1 名逐柱累加 · 线性纵轴。'),
     ]:
         f, ax = plt.subplots(figsize=(17, 6.4), facecolor=BG)
         f.subplots_adjust(left=.06, right=.985, top=.78, bottom=.18)
@@ -176,10 +180,10 @@ def render(rows, summary, peaks):
         add_list_labels(ax)
         f.suptitle(title, x=.06, ha='left', fontsize=21, y=.975)
         f.text(.06, .86, sub, fontsize=10, color='#64748b')
-        footer = f'{stamp} 北京时间快照 · 传统 Demonlist · 含 verifier · 大虚线：主榜 / 扩展榜分界'
+        footer = f'{stamp} 北京时间快照 · {label} · 含 verifier · 大虚线：主榜 / 扩展榜分界'
         footer += '\n0 表示无人以该关为 Hardest；verifier 若有更难通关，则归入更高名次。'
         f.text(.06,.02,footer,fontsize=9,color='#64748b',linespacing=1.5)
-        f.savefig(OUTPUT/f'{name}.png', dpi=160)
+        f.savefig(output/f'{name}.png', dpi=160)
         plt.close(f)
     # Separate detailed panels improve legibility in GitHub's narrower README column.
     for start in [1, 51, 101]:
@@ -193,12 +197,34 @@ def render(rows, summary, peaks):
         for r in subset:
             value = r['hardest_players_including_verifiers']
             ax.annotate(str(value), (r['rank'], value), xytext=(0, 5), textcoords='offset points', ha='center', fontsize=8, color=INK)
-        f.suptitle(f"传统榜精细视图 · #{start}–#{start+49}（含 verifier）", x=.065, ha='left', fontsize=17, y=.96)
-        f.text(.065,.86,f'统一口径：{total:,} 人，150 关均已评级 · 平方根纵轴 · 柱上为实际人数，每位玩家只归入其最难通关名次',fontsize=10,color='#64748b')
-        f.savefig(OUTPUT/f'hardest_detail_{start}_{start+49}.png',dpi=160)
+        f.suptitle(f"{label}精细视图 · #{start}–#{start+49}（含 verifier）", x=.065, ha='left', fontsize=17, y=.96)
+        f.text(.065,.86,f'统一口径：{total:,} 人，{scope} · 平方根纵轴 · 柱上为实际人数，每位玩家只归入其最难通关名次',fontsize=10,color='#64748b')
+        f.savefig(output/f'hardest_detail_{start}_{start+49}.png',dpi=160)
         plt.close(f)
     print(f'Rendered charts; {len(peaks)} peak levels; {summary["unique_players_including_verifiers"]:,} players including verifiers')
 
 
 if __name__ == '__main__':
-    render(*load_data())
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--including-unrated', action='store_true', help='Render the archived original snapshot with an explicit including-unrated label')
+    args = parser.parse_args()
+    if args.including_unrated:
+        source = ROOT/'data'/'including_unrated'
+        with (source/'hardest_by_rank.csv').open(encoding='utf-8-sig') as file:
+            rows = list(csv.DictReader(file))
+        for row in rows:
+            for key in row:
+                if key != 'level_name':
+                    row[key] = int(row[key])
+        with (source/'peak_levels.csv').open(encoding='utf-8-sig') as file:
+            peaks = list(csv.DictReader(file))
+        for row in peaks:
+            row['rank'] = int(row['rank'])
+            row[COUNT_FIELD] = int(row[COUNT_FIELD])
+        summary = json.loads((source/'summary.json').read_text())
+        assert [r['rank'] for r in rows] == list(range(1,151))
+        assert np.array_equal(np.cumsum([r[COUNT_FIELD] for r in rows]), [r[CUMULATIVE_FIELD] for r in rows])
+        assert rows[-1][CUMULATIVE_FIELD] == summary['unique_players_including_verifiers']
+        render(rows, summary, peaks, including_unrated=True)
+    else:
+        render(*load_data())
